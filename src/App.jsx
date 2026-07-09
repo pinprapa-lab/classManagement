@@ -1,12 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, Settings, Bell, LogOut } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import StudentList from './components/StudentList';
-import { initialStudents } from './data/mockData';
+import { supabase } from './lib/supabase';
 
 function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
-  const [students, setStudents] = useState(initialStudents);
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .order('id', { ascending: true });
+      
+      if (error) throw error;
+      
+      // Map database snake_case fields back to camelCase used in UI
+      const mappedStudents = data.map(item => ({
+        id: item.id,
+        firstName: item.first_name,
+        lastName: item.last_name,
+        grade: item.grade,
+        phone: item.phone,
+        email: item.email,
+        address: item.address,
+        status: item.status
+      }));
+      
+      setStudents(mappedStudents);
+    } catch (error) {
+      console.error('Error fetching students:', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
 
   const navigation = [
     { id: 'dashboard', name: 'ภาพรวม', icon: LayoutDashboard },
@@ -111,8 +146,22 @@ function App() {
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto pb-20 md:pb-0">
-            {currentTab === 'dashboard' && <Dashboard students={students} />}
-            {currentTab === 'students' && <StudentList students={students} setStudents={setStudents} />}
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+              </div>
+            ) : (
+              <>
+                {currentTab === 'dashboard' && <Dashboard students={students} />}
+                {currentTab === 'students' && (
+                  <StudentList 
+                    students={students} 
+                    setStudents={setStudents} 
+                    onRefresh={fetchStudents} 
+                  />
+                )}
+              </>
+            )}
           </div>
         </div>
       </main>

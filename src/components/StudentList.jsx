@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Search, Plus, Edit2, Trash2, X, Check, MapPin } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
-export default function StudentList({ students, setStudents }) {
+export default function StudentList({ students, onRefresh }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   
   const [formData, setFormData] = useState({
     id: '',
@@ -18,10 +20,10 @@ export default function StudentList({ students, setStudents }) {
   });
 
   const filteredStudents = students.filter(student => 
-    student.firstName.includes(searchTerm) || 
-    student.lastName.includes(searchTerm) ||
-    student.id.includes(searchTerm) ||
-    student.grade.includes(searchTerm)
+    (student.firstName && student.firstName.includes(searchTerm)) || 
+    (student.lastName && student.lastName.includes(searchTerm)) ||
+    (student.id && student.id.includes(searchTerm)) ||
+    (student.grade && student.grade.includes(searchTerm))
   );
 
   const openModal = (student = null) => {
@@ -54,19 +56,55 @@ export default function StudentList({ students, setStudents }) {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (editingId) {
-      setStudents(students.map(s => s.id === editingId ? formData : s));
-    } else {
-      setStudents([...students, formData]);
+    setSubmitting(true);
+    try {
+      const dbPayload = {
+        id: formData.id,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        grade: formData.grade,
+        phone: formData.phone,
+        email: formData.email,
+        address: formData.address,
+        status: formData.status
+      };
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('students')
+          .update(dbPayload)
+          .eq('id', editingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('students')
+          .insert([dbPayload]);
+        if (error) throw error;
+      }
+      
+      await onRefresh();
+      closeModal();
+    } catch (error) {
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล: ' + error.message);
+    } finally {
+      setSubmitting(false);
     }
-    closeModal();
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('คุณต้องการลบข้อมูลนักเรียนคนนี้ใช่หรือไม่?')) {
-      setStudents(students.filter(s => s.id !== id));
+      try {
+        const { error } = await supabase
+          .from('students')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+        await onRefresh();
+      } catch (error) {
+        alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + error.message);
+      }
     }
   };
 
@@ -257,15 +295,18 @@ export default function StudentList({ students, setStudents }) {
               <button 
                 type="button" 
                 onClick={closeModal}
-                className="px-5 py-2.5 rounded-xl font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors"
+                disabled={submitting}
+                className="px-5 py-2.5 rounded-xl font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
                 ยกเลิก
               </button>
               <button 
                 type="submit" 
                 form="student-form"
-                className="px-5 py-2.5 rounded-xl font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/30"
+                disabled={submitting}
+                className="px-5 py-2.5 rounded-xl font-medium text-white bg-primary-600 hover:bg-primary-700 transition-colors shadow-lg shadow-primary-500/30 disabled:opacity-50 flex items-center gap-2"
               >
+                {submitting && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>}
                 บันทึกข้อมูล
               </button>
             </div>
